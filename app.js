@@ -45,7 +45,7 @@ If both present: confirm in one sentence and say you'll text confirmation.
 `.trim();
 
   const resp = await openai.responses.create({
-    model: "gpt-5.2",
+    model: "gpt-4o-mini",
     input: [
       { role: "system", content: system },
       { role: "user", content: `Patient said: ${userText}\nSession: ${JSON.stringify(session)}` },
@@ -95,7 +95,7 @@ app.post('/voice/initial', (req, res) => {
     });
     dial.number(OFFICE_TRANSFER_NUMBER);
   } else {
-    twiml.say("Hi! This is the office assistant. I can help you schedule an appointment.");
+    twiml.say("Hi! Thank you for calling Cupo Dental, this is Ashley, how can I can help you?");
     twiml.redirect('/voice/gather');
   }
 
@@ -153,36 +153,44 @@ app.post('/voice/gather', (req, res) => {
 /** ------------- HANDLE SPEECH ------------- */
 app.post('/voice/handle', async (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  const callSid = req.body.CallSid;
-  const session = s(callSid);
 
-  const speech = (req.body.SpeechResult || "").trim();
-  session.turns += 1;
+  try {
+    const callSid = req.body.CallSid;
+    const session = s(callSid);
 
-  if (!speech) {
-    twiml.say("I didn’t catch that.");
-    twiml.redirect('/voice/gather');
-    return res.type('text/xml').send(twiml.toString());
-  }
+    const speech = (req.body.SpeechResult || "").trim();
+    session.turns += 1;
 
-  const cmd = await agentReply(speech, session);
-  const ex = cmd.extracted || {};
-  if (ex.name) session.name = ex.name;
-  if (ex.preferred_time) session.preferred_time = ex.preferred_time;
+    if (!speech) {
+      twiml.say("I didn’t catch that.");
+      twiml.redirect('/voice/gather');
+      return res.type('text/xml').send(twiml.toString());
+    }
 
-  // “Booked” when both fields exist
-  if (session.name && session.preferred_time) session.booked = true;
+    const cmd = await agentReply(speech, session);
+    const ex = cmd.extracted || {};
+    if (ex.name) session.name = ex.name;
+    if (ex.preferred_time) session.preferred_time = ex.preferred_time;
 
-  twiml.say(cmd.say || "Okay.");
+    if (session.name && session.preferred_time) session.booked = true;
 
-  if (session.booked) {
-    twiml.say("You’re all set. We’ll text you to confirm. Goodbye.");
+    twiml.say(cmd.say || "Okay.");
+
+    if (session.booked) {
+      twiml.say("You’re all set. We’ll text you to confirm. Goodbye.");
+      twiml.hangup();
+    } else {
+      twiml.redirect('/voice/gather');
+    }
+
+    res.type('text/xml').send(twiml.toString());
+
+  } catch (err) {
+    console.error("VOICE HANDLE ERROR:", err);
+    twiml.say("Sorry, something went wrong. A team member will call you back.");
     twiml.hangup();
-  } else {
-    twiml.redirect('/voice/gather');
+    res.type('text/xml').send(twiml.toString());
   }
-
-  res.type('text/xml').send(twiml.toString());
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
