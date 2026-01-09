@@ -35,33 +35,39 @@ function s(callSid) {
 }
 
 async function agentReply(userText, session) {
-  const system = `
+  try {
+    const system = `
 You are a dental office phone assistant.
 Goal: collect: (1) patient name, (2) preferred day/time.
-Be short and clear. No clinical advice.
-Output ONLY valid JSON: {"say":"...", "extracted":{"name": "...", "preferred_time":"..."}}.
-If missing name: ask name. If missing preferred_time: ask for preferred day/time.
-If both present: confirm in one sentence and say you'll text confirmation.
+Be short and clear.
+Output ONLY valid JSON:
+{"say":"...", "extracted":{"name": "...", "preferred_time":"..."}}
 `.trim();
 
-  const resp = await openai.responses.create({
-    model: "gpt-4o-mini",
-    input: [
-      { role: "system", content: system },
-      { role: "user", content: `Patient said: ${userText}\nSession: ${JSON.stringify(session)}` },
-    ],
-  });
+    const resp = await openai.responses.create({
+      model: "gpt-4o-mini",
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: userText }
+      ],
+    });
 
-  const text = (resp.output_text || "").trim();
-  try {
+    const text = (resp.output_text || "").trim();
     const a = text.indexOf("{");
     const b = text.lastIndexOf("}");
     const raw = a >= 0 && b >= 0 ? text.slice(a, b + 1) : text;
+
     return JSON.parse(raw);
-  } catch {
-    return { say: "Sorry — can you repeat that?", extracted: {} };
+
+  } catch (err) {
+    console.error("OPENAI ERROR:", err);
+    return {
+      say: "Thanks. What day and time works best for you?",
+      extracted: {}
+    };
   }
 }
+
 
 /** ------------- OUTBOUND CALL TRIGGER -------------
  * POST /call  { "to": "+15551234567" }
@@ -187,7 +193,7 @@ app.post('/voice/handle', async (req, res) => {
 
   } catch (err) {
     console.error("VOICE HANDLE ERROR:", err);
-    twiml.say("Sorry, something went wrong. A team member will call you back.");
+    twiml.say("I apologize, but something went wrong. A team member will call you back shortly.");
     twiml.hangup();
     res.type('text/xml').send(twiml.toString());
   }
