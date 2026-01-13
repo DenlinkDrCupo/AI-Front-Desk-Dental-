@@ -183,54 +183,48 @@ app.post('/voice/gather', (req, res) => {
 app.post('/voice/handle', async (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
-  try {
-    const callSid = req.body.CallSid;
-    const session = s(callSid);
+  const callSid = req.body.CallSid;
+  const session = s(callSid);
 
-    const speech = (req.body.SpeechResult || "").trim();
-    session.turns += 1;
+  const speech = (req.body.SpeechResult || "").trim();
+  session.turns += 1;
 
-    if (!speech) {
-      twiml.say("I didn’t catch that.");
-      twiml.redirect('/voice/gather');
-      return res.type('text/xml').send(twiml.toString());
-    }
-
-   let cmd;
-try {
-  cmd = await agentReply(speech, session);
-} catch (e) {
-  console.error("AI error:", e);
-}
-
-if (!cmd || typeof cmd.say !== "string") {
-  twiml.say("Thanks. One moment while I get that scheduled.");
-  twiml.redirect('/voice/gather');
-  return res.type('text/xml').send(twiml.toString());
-}
-    const ex = cmd.extracted || {};
-    if (ex.name) session.name = ex.name;
-    if (ex.preferred_time) session.preferred_time = ex.preferred_time;
-
-    if (session.name && session.preferred_time) session.booked = true;
-
-    twiml.say(cmd.say || "Okay.");
-
-    if (session.booked) {
-      twiml.say("You’re all set. We’ll text you to confirm. Goodbye.");
-      twiml.hangup();
-    } else {
-      twiml.redirect('/voice/gather');
-    }
-
-    res.type('text/xml').send(twiml.toString());
-
-  } catch (err) {
-    console.error("VOICE HANDLE ERROR:", err);
-    twiml.say("I apologize, but something went wrong. A team member will call you back shortly.");
-    twiml.hangup();
-    res.type('text/xml').send(twiml.toString());
+  if (!speech) {
+    twiml.say(
+      { voice: "Polly.Joanna-Neural" },
+      "Sorry, I didn’t catch that. Could you repeat?"
+    );
+    twiml.redirect('/voice/gather');
+    return res.type('text/xml').send(twiml.toString());
   }
+  const cmd = await agentReply(speech, session);
+
+  const safeSay =
+    cmd &&
+    typeof cmd.say === "string" &&
+    cmd.say.length > 0
+      ? cmd.say
+      : "Okay.";
+
+  twiml.say(
+    { voice: "Polly.Joanna-Neural" },
+    safeSay
+  );
+
+  if (cmd?.extracted?.name) session.name = cmd.extracted.name;
+  if (cmd?.extracted?.preferred_time) session.preferred_time = cmd.extracted.preferred_time;
+
+  if (session.name && session.preferred_time) {
+    twiml.say(
+      { voice: "Polly.Joanna-Neural" },
+      "Perfect. We’ll text you to confirm your appointment. Goodbye."
+    );
+    twiml.hangup();
+  } else {
+    twiml.redirect('/voice/gather');
+  }
+
+  res.type('text/xml').send(twiml.toString());
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
