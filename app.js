@@ -107,8 +107,25 @@ app.post('/voice/initial', (req, res) => {
     });
     dial.number(OFFICE_TRANSFER_NUMBER);
   } else {
-    twiml.saytwiml.say({ voice: "Polly.Joanna-Neural" }, "Hi! Thank you for calling Cupo Dental, this is Ashley, how can I can help you?");
-    twiml.redirect('/voice/gather');
+ const speechToSay =
+  typeof cmd?.say === "string" && cmd.say.length > 0
+    ? cmd.say
+    : "Okay.";
+
+twiml.say(
+  { voice: "Polly.Joanna-Neural" },
+  speechToSay
+);
+if (session.booked) {
+  twiml.say(
+    { voice: "Polly.Joanna-Neural" },
+    "You’re all set. We’ll text you to confirm. Goodbye."
+  );
+  twiml.hangup();
+} else {
+  twiml.redirect('/voice/gather');
+}
+
   }
 
   res.type('text/xml').send(twiml.toString());
