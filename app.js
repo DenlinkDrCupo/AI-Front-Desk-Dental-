@@ -35,36 +35,42 @@ function s(callSid) {
 }
 
 async function agentReply(userText, session) {
-  try {
-    const system = `
+  const system = `
 You are a dental office phone assistant.
-Goal: collect: (1) patient name, (2) preferred day/time.
-Be short and clear.
-Output ONLY valid JSON:
-{"say":"...", "extracted":{"name": "...", "preferred_time":"..."}}
+Your job is ONLY to collect:
+1) Patient name
+2) Preferred appointment day and time
+
+Speak naturally and briefly.
+Return ONLY valid JSON in this exact shape:
+{"say":"...", "extracted":{"name":null,"preferred_time":null}}
 `.trim();
 
+  try {
     const resp = await openai.responses.create({
       model: "gpt-4o-mini",
       input: [
         { role: "system", content: system },
         { role: "user", content: userText }
       ],
+      max_output_tokens: 120
     });
 
     const text = (resp.output_text || "").trim();
-    const a = text.indexOf("{");
-    const b = text.lastIndexOf("}");
-    const raw = a >= 0 && b >= 0 ? text.slice(a, b + 1) : text;
+    if (!text) return null;
 
-    return JSON.parse(raw);
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1) return null;
 
+    const parsed = JSON.parse(text.slice(start, end + 1));
+
+    if (!parsed.say) return null;
+
+    return parsed;
   } catch (err) {
-    console.error("OPENAI ERROR:", err);
-    return {
-      say: "Thanks. What day and time works best for you?",
-      extracted: {}
-    };
+    console.error("agentReply failed:", err);
+    return null;
   }
 }
 
@@ -173,7 +179,18 @@ app.post('/voice/handle', async (req, res) => {
       return res.type('text/xml').send(twiml.toString());
     }
 
-    const cmd = await agentReply(speech, session);
+   let cmd;
+try {
+  cmd = await agentReply(speech, session);
+} catch (e) {
+  console.error("AI error:", e);
+}
+
+if (!cmd || typeof cmd.say !== "string") {
+  twiml.say("Thanks. One moment while I get that scheduled.");
+  twiml.redirect('/voice/gather');
+  return res.type('text/xml').send(twiml.toString());
+}
     const ex = cmd.extracted || {};
     if (ex.name) session.name = ex.name;
     if (ex.preferred_time) session.preferred_time = ex.preferred_time;
