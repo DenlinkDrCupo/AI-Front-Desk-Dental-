@@ -195,27 +195,32 @@ app.post('/voice/handle', (req, res) => {
   session.turns += 1;
 
   if (!speech) {
-    twiml.say("Sorry, I didn’t catch that. What day and time works best?");
+    twiml.say("Sorry, I didn’t catch that. Let’s try again.");
     twiml.redirect('/voice/gather');
     return res.type('text/xml').send(twiml.toString());
   }
 
-  // VERY simple extraction for now
+  // STEP 1: Collect NAME first
+  if (!session.name) {
+    session.name = speech;
+    twiml.say(`Thanks ${session.name}. What day and time works best for you?`);
+    twiml.redirect('/voice/gather');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // STEP 2: Collect TIME second
   if (!session.preferred_time) {
     session.preferred_time = speech;
-  }
-
-  if (!session.name) {
-    twiml.say("Got it. And what is your name?");
-    twiml.redirect('/voice/gather');
-  } else if (!session.preferred_time) {
-    twiml.say("What day and time works best?");
-    twiml.redirect('/voice/gather');
-  } else {
-    twiml.say("Perfect. We’ll text you to confirm. Goodbye.");
+    twiml.say(
+      `Perfect. We have you down for ${session.preferred_time}. We’ll text you to confirm. Goodbye.`
+    );
     twiml.hangup();
+    return res.type('text/xml').send(twiml.toString());
   }
 
+  // SAFETY (should never hit)
+  twiml.say("Thank you. Goodbye.");
+  twiml.hangup();
   res.type('text/xml').send(twiml.toString());
 });
 
