@@ -186,54 +186,39 @@ app.post('/voice/gather', (req, res) => {
 });
 
 /** Handle speech */
-app.post('/voice/handle', async (req, res) => {
+app.post('/voice/handle', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-
   const callSid = req.body.CallSid;
-  const session = getSession(callSid);
+  const session = s(callSid);
 
   const speech = (req.body.SpeechResult || "").trim();
   session.turns += 1;
 
   if (!speech) {
-    twiml.say({ voice: "Polly.Joanna-Neural" }, "Sorry, I didn’t catch that. Could you repeat?");
-    twiml.redirect(`${BASE_URL}/voice/gather`);
+    twiml.say("Sorry, I didn’t catch that. What day and time works best?");
+    twiml.redirect('/voice/gather');
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const cmd = await agentReply(speech, session);
+  // VERY simple extraction for now
+  if (!session.preferred_time) {
+    session.preferred_time = speech;
+  }
 
-  // Save extracted info
-  if (cmd.extracted?.name) session.name = cmd.extracted.name;
-  if (cmd.extracted?.preferred_time) session.preferred_time = cmd.extracted.preferred_time;
-
-  twiml.say({ voice: "Polly.Joanna-Neural" }, cmd.say);
-
-  const booked = Boolean(session.name && session.preferred_time);
-
-  if (booked) {
-    // OPTIONAL: SMS the caller
-    if (String(ENABLE_SMS).toLowerCase() === "true") {
-      const to = req.body.From; // caller number
-      const msg = `Cupo Dental: Thanks ${session.name}. We received your request for ${session.preferred_time}. We will confirm shortly.`;
-
-      twilioClient.messages
-        .create({ to, from: TWILIO_FROM_NUMBER, body: msg })
-        .then(() => console.log("SMS sent to", to))
-        .catch((e) => console.error("SMS failed:", e));
-    }
-
-    twiml.say(
-      { voice: "Polly.Joanna-Neural" },
-      "Perfect. We received your request. Goodbye."
-    );
-    twiml.hangup();
+  if (!session.name) {
+    twiml.say("Got it. And what is your name?");
+    twiml.redirect('/voice/gather');
+  } else if (!session.preferred_time) {
+    twiml.say("What day and time works best?");
+    twiml.redirect('/voice/gather');
   } else {
-    twiml.redirect(`${BASE_URL}/voice/gather`);
+    twiml.say("Perfect. We’ll text you to confirm. Goodbye.");
+    twiml.hangup();
   }
 
   res.type('text/xml').send(twiml.toString());
 });
+
 
 // Railway uses PORT it provides. Do not force 3000.
 const listenPort = Number(PORT || 3000);
