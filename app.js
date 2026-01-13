@@ -101,7 +101,7 @@ app.post('/voice/initial', (req, res) => {
     });
     dial.number(OFFICE_TRANSFER_NUMBER);
   } else {
-    twiml.say("Hi! Thank you for calling Cupo Dental, this is Ashley, how can I can help you?");
+    twiml.saytwiml.say({ voice: "Polly.Joanna-Neural" }, "Hi! Thank you for calling Cupo Dental, this is Ashley, how can I can help you?");
     twiml.redirect('/voice/gather');
   }
 
